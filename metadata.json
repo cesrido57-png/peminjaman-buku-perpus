@@ -1,0 +1,7 @@
+{
+  "name": "Pustaka - Library Management System",
+  "description": "Aplikasi web modern untuk manajemen perpustakaan: katalog buku, peminjaman, persetujuan petugas, pengembalian, dan laporan operasional.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
