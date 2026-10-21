@@ -20,23 +20,42 @@ import { Loan, User, SystemSettings } from '@/types/library';
 export default function MemberDashboard() {
   const [currentUser] = useState<User>(getCurrentUser());
   const [loans, setLoans] = useState<Loan[]>([]);
-  const [settings, setSettings] = useState<SystemSettings>(getSettings());
+  const [settings, setSettings] = useState<SystemSettings>({ maxActiveCopiesPerMember: 3, loanDurationDays: 7, allowMemberCancellation: true, libraryName: '', libraryAddress: '', updatedAt: '', updatedBy: '' });
   const [toast, setToast] = useState<string | null>(null);
 
-  useEffect(() => {
-    refreshData();
-  }, []);
-
-  const refreshData = () => {
-    setLoans(getLoans());
-    setSettings(getSettings());
+  const refreshData = async () => {
+    const [loadedLoans, loadedSettings] = await Promise.all([getLoans(), getSettings()]);
+    setLoans(loadedLoans);
+    setSettings(loadedSettings);
   };
 
-  const handleCancel = (loanId: string) => {
-    const res = cancelLoan(loanId, currentUser);
-    setToast(res.message);
-    refreshData();
-    setTimeout(() => setToast(null), 3000);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [loadedLoans, loadedSettings] = await Promise.all([getLoans(), getSettings()]);
+        if (cancelled) return;
+        setLoans(loadedLoans);
+        setSettings(loadedSettings);
+      } catch (error) {
+        console.error('Gagal memuat data dari database:', error);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleCancel = async (loanId: string) => {
+    try {
+      const res = await cancelLoan(loanId, currentUser);
+      setToast(res.message);
+      const loadedLoans = await getLoans();
+      setLoans(loadedLoans);
+      setTimeout(() => setToast(null), 3000);
+    } catch (error) {
+      console.error('Gagal membatalkan pinjaman:', error);
+    }
   };
 
   const myLoans = loans.filter(l => l.memberId === currentUser.uid);

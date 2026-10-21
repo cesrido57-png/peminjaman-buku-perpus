@@ -31,24 +31,46 @@ export default function Navbar() {
 
   useEffect(() => {
     setUsr(getCurrentUser());
-    setAllUsers(getUsers());
-    
-    // count pending requests for staff/admin or my loans for member
-    const loans = getLoans();
-    if (currentUser.role === 'admin' || currentUser.role === 'staff') {
-      const pending = loans.filter(l => l.status === 'PENDING').length;
-      setPendingCount(pending);
-    } else {
-      const myActive = loans.filter(l => l.memberId === currentUser.uid && ['BORROWED'].includes(l.status)).length;
-      setPendingCount(myActive);
-    }
-  }, [pathname]);
+    let cancelled = false;
+    (async () => {
+      try {
+        const [users, loans] = await Promise.all([getUsers(), getLoans()]);
+        if (cancelled) return;
+        setAllUsers(users);
+        // count pending requests for staff/admin or my loans for member
+        if (currentUser.role === 'admin' || currentUser.role === 'staff') {
+          const pending = loans.filter(l => l.status === 'PENDING').length;
+          setPendingCount(pending);
+        } else {
+          const myActive = loans.filter(l => l.memberId === currentUser.uid && ['BORROWED'].includes(l.status)).length;
+          setPendingCount(myActive);
+        }
+      } catch (error) {
+        console.error('Gagal memuat data navbar:', error);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [pathname, currentUser]);
 
-  const handleSwitchUser = (user: User) => {
+  const handleSwitchUser = async (user: User) => {
     setCurrentUser(user);
     setUsr(user);
     setShowRoleMenu(false);
-    
+
+    try {
+      const [users, loans] = await Promise.all([getUsers(), getLoans()]);
+      setAllUsers(users);
+      if (user.role === 'admin' || user.role === 'staff') {
+        setPendingCount(loans.filter(l => l.status === 'PENDING').length);
+      } else {
+        setPendingCount(loans.filter(l => l.memberId === user.uid && ['BORROWED'].includes(l.status)).length);
+      }
+    } catch (error) {
+      console.error('Gagal memuat ulang data navbar:', error);
+    }
+
     // redirect based on role
     if (user.role === 'admin') router.push('/dashboard/admin');
     else if (user.role === 'staff') router.push('/dashboard/staff');

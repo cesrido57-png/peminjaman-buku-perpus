@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { 
   BookOpen, 
@@ -16,13 +16,38 @@ import {
   BookMarked
 } from 'lucide-react';
 import { getBooks, getCategories, getLoans, getUsers, getCurrentUser } from '@/lib/store';
+import type { Book, Category, Loan, User } from '@/types/library';
 
 export default function HomePage() {
-  const books = getBooks();
-  const categories = getCategories();
-  const loans = getLoans();
-  const users = getUsers();
-  const currentUser = getCurrentUser();
+  const [books, setBooks] = useState<Book[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [loans, setLoans] = useState<Loan[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [currentUser] = useState<User>(getCurrentUser());
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [loadedBooks, loadedCategories, loadedLoans, loadedUsers] = await Promise.all([
+          getBooks(),
+          getCategories(),
+          getLoans(),
+          getUsers(),
+        ]);
+        if (cancelled) return;
+        setBooks(loadedBooks);
+        setCategories(loadedCategories);
+        setLoans(loadedLoans);
+        setUsers(loadedUsers);
+      } catch (error) {
+        console.error('Gagal memuat data dari database:', error);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const activeBooksCount = books.filter(b => b.status === 'active').length;
   const totalCopiesCount = books.reduce((sum, b) => sum + b.totalCopies, 0);

@@ -15,7 +15,7 @@ import {
   BookMarked
 } from 'lucide-react';
 import { getBooks, getCategories, getCurrentUser, requestLoan, getLoans } from '@/lib/store';
-import { Book, Category } from '@/types/library';
+import { Book, Category, Loan } from '@/types/library';
 
 function CatalogContent() {
   const searchParams = useSearchParams();
@@ -24,6 +24,7 @@ function CatalogContent() {
 
   const [books, setBooks] = useState<Book[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [loans, setLoans] = useState<Loan[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState(initialCategory);
   const [availabilityFilter, setAvailabilityFilter] = useState<'all' | 'available'>('all');
@@ -33,15 +34,30 @@ function CatalogContent() {
   const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
-    const loadedBooks = getBooks();
-    const loadedCategories = getCategories();
-    setBooks(loadedBooks);
-    setCategories(loadedCategories);
+    let cancelled = false;
+    (async () => {
+      try {
+        const [loadedBooks, loadedCategories, loadedLoans] = await Promise.all([
+          getBooks(),
+          getCategories(),
+          getLoans(),
+        ]);
+        if (cancelled) return;
+        setBooks(loadedBooks);
+        setCategories(loadedCategories);
+        setLoans(loadedLoans);
 
-    if (initialBookId) {
-      const found = loadedBooks.find(b => b.id === initialBookId);
-      if (found) setSelectedBook(found);
-    }
+        if (initialBookId) {
+          const found = loadedBooks.find(b => b.id === initialBookId);
+          if (found) setSelectedBook(found);
+        }
+      } catch (error) {
+        console.error('Gagal memuat data katalog:', error);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [initialBookId]);
 
   const filteredBooks = books.filter(b => {
@@ -58,16 +74,22 @@ function CatalogContent() {
     return matchesSearch && matchesCategory && matchesAvailability;
   });
 
-  const handleRequestLoan = (book: Book) => {
+  const handleRequestLoan = async (book: Book) => {
     if (currentUser.role !== 'member') {
       setToastMessage({ type: 'error', text: 'Hanya akun Anggota yang dapat mengajukan peminjaman buku.' });
       return;
     }
 
-    const res = requestLoan(book.id, currentUser);
+    const res = await requestLoan(book.id, currentUser);
     if (res.success) {
       setToastMessage({ type: 'success', text: res.message });
-      setBooks(getBooks()); // refresh state
+      try {
+        const [refreshedBooks, refreshedLoans] = await Promise.all([getBooks(), getLoans()]);
+        setBooks(refreshedBooks);
+        setLoans(refreshedLoans);
+      } catch (error) {
+        console.error('Gagal memperbarui data setelah peminjaman:', error);
+      }
       setTimeout(() => {
         setSelectedBook(null);
         setToastMessage(null);

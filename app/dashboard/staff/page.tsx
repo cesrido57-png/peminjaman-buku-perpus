@@ -34,11 +34,28 @@ export default function StaffDashboard() {
   const [rejectionReason, setRejectionReason] = useState('');
 
   useEffect(() => {
-    refreshLoans();
+    let cancelled = false;
+    (async () => {
+      try {
+        const [loadedLoans] = await Promise.all([getLoans()]);
+        if (cancelled) return;
+        setLoans(loadedLoans);
+      } catch (error) {
+        console.error('Gagal memuat data dari database:', error);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const refreshLoans = () => {
-    setLoans(getLoans());
+  const refreshLoans = async () => {
+    try {
+      const [loadedLoans] = await Promise.all([getLoans()]);
+      setLoans(loadedLoans);
+    } catch (error) {
+      console.error('Gagal memuat data pinjaman:', error);
+    }
   };
 
   if (currentUser.role !== 'staff' && currentUser.role !== 'admin') {
@@ -53,35 +70,35 @@ export default function StaffDashboard() {
     );
   }
 
-  const handleApprove = (loanId: string) => {
-    const res = reviewLoanRequest(loanId, true, '', currentUser);
+  const handleApprove = async (loanId: string) => {
+    const res = await reviewLoanRequest(loanId, true, '', currentUser);
     setToast(res.message);
-    refreshLoans();
+    await refreshLoans();
     setTimeout(() => setToast(null), 3000);
   };
 
-  const handleRejectSubmit = (e: React.FormEvent) => {
+  const handleRejectSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!rejectLoanId) return;
-    const res = reviewLoanRequest(rejectLoanId, false, rejectionReason || 'Stok tidak memenuhi syarat atau ketentuan perpustakaan.', currentUser);
+    const res = await reviewLoanRequest(rejectLoanId, false, rejectionReason || 'Stok tidak memenuhi syarat atau ketentuan perpustakaan.', currentUser);
     setToast(res.message);
     setRejectLoanId(null);
     setRejectionReason('');
-    refreshLoans();
+    await refreshLoans();
     setTimeout(() => setToast(null), 3000);
   };
 
-  const handleCheckout = (loanId: string) => {
-    const res = checkoutLoan(loanId, currentUser);
+  const handleCheckout = async (loanId: string) => {
+    const res = await checkoutLoan(loanId, currentUser);
     setToast(res.message);
-    refreshLoans();
+    await refreshLoans();
     setTimeout(() => setToast(null), 3000);
   };
 
-  const handleReturn = (loanId: string) => {
-    const res = returnLoan(loanId, currentUser);
+  const handleReturn = async (loanId: string) => {
+    const res = await returnLoan(loanId, currentUser);
     setToast(res.message);
-    refreshLoans();
+    await refreshLoans();
     setTimeout(() => setToast(null), 3000);
   };
 

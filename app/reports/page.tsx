@@ -23,10 +23,27 @@ export default function ReportsPage() {
   const [reportType, setReportType] = useState<'inventory' | 'active_loans' | 'history'>('inventory');
 
   useEffect(() => {
-    setBooks(getBooks());
-    setLoans(getLoans());
-    setUsers(getUsers());
-    setCategories(getCategories());
+    let cancelled = false;
+    (async () => {
+      try {
+        const [loadedBooks, loadedLoans, loadedUsers, loadedCategories] = await Promise.all([
+          getBooks(),
+          getLoans(),
+          getUsers(),
+          getCategories(),
+        ]);
+        if (cancelled) return;
+        setBooks(loadedBooks);
+        setLoans(loadedLoans);
+        setUsers(loadedUsers);
+        setCategories(loadedCategories);
+      } catch (error) {
+        console.error('Gagal memuat data dari database:', error);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const activeLoans = loans.filter(l => l.status === 'BORROWED');

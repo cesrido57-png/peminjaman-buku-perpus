@@ -26,6 +26,7 @@ import {
   getSettings, 
   getAuditLogs, 
   getCurrentUser, 
+  INITIAL_SETTINGS, 
   saveBook, 
   archiveBook, 
   saveCategory, 
@@ -42,7 +43,7 @@ export default function AdminDashboard() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loans, setLoans] = useState<Loan[]>([]);
-  const [settings, setSettings] = useState<SystemSettings>(getSettings());
+  const [settings, setSettings] = useState<SystemSettings>(INITIAL_SETTINGS);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
 
   // Modal states for Book CRUD
@@ -56,18 +57,35 @@ export default function AdminDashboard() {
   // Toast
   const [toast, setToast] = useState<string | null>(null);
 
-  useEffect(() => {
-    refreshData();
-  }, []);
-
-  const refreshData = () => {
-    setBooks(getBooks());
-    setCategories(getCategories());
-    setUsers(getUsers());
-    setLoans(getLoans());
-    setSettings(getSettings());
-    setAuditLogs(getAuditLogs());
+  const refreshAll = async (isCancelled?: () => boolean) => {
+    try {
+      const [loadedBooks, loadedCategories, loadedUsers, loadedLoans, loadedSettings, loadedAuditLogs] = await Promise.all([
+        getBooks(),
+        getCategories(),
+        getUsers(),
+        getLoans(),
+        getSettings(),
+        getAuditLogs(),
+      ]);
+      if (isCancelled?.()) return;
+      setBooks(loadedBooks);
+      setCategories(loadedCategories);
+      setUsers(loadedUsers);
+      setLoans(loadedLoans);
+      setSettings(loadedSettings);
+      setAuditLogs(loadedAuditLogs);
+    } catch (error) {
+      console.error('Gagal memuat data dari database:', error);
+    }
   };
+
+  useEffect(() => {
+    let cancelled = false;
+    refreshAll(() => cancelled);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   if (currentUser.role !== 'admin') {
     return (
@@ -81,34 +99,70 @@ export default function AdminDashboard() {
     );
   }
 
-  const handleSaveBookSubmit = (e: React.FormEvent) => {
+  const handleSaveBookSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingBook || !editingBook.title) return;
-    saveBook(editingBook, currentUser);
-    setShowBookModal(false);
-    setEditingBook(null);
-    setToast('Buku berhasil disimpan.');
-    refreshData();
-    setTimeout(() => setToast(null), 3000);
+    try {
+      await saveBook(editingBook, currentUser);
+      setShowBookModal(false);
+      setEditingBook(null);
+      setToast('Buku berhasil disimpan.');
+      refreshAll();
+      setTimeout(() => setToast(null), 3000);
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : 'Gagal menyimpan buku.');
+      setTimeout(() => setToast(null), 3000);
+    }
   };
 
-  const handleSaveCategorySubmit = (e: React.FormEvent) => {
+  const handleSaveCategorySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingCat || !editingCat.name) return;
-    saveCategory(editingCat, currentUser);
-    setShowCatModal(false);
-    setEditingCat(null);
-    setToast('Kategori berhasil disimpan.');
-    refreshData();
-    setTimeout(() => setToast(null), 3000);
+    try {
+      await saveCategory(editingCat, currentUser);
+      setShowCatModal(false);
+      setEditingCat(null);
+      setToast('Kategori berhasil disimpan.');
+      refreshAll();
+      setTimeout(() => setToast(null), 3000);
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : 'Gagal menyimpan kategori.');
+      setTimeout(() => setToast(null), 3000);
+    }
   };
 
-  const handleUpdateSettingsSubmit = (e: React.FormEvent) => {
+  const handleUpdateSettingsSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    updateSettings(settings, currentUser);
-    setToast('Pengaturan kebijakan perpustakaan berhasil diperbarui.');
-    refreshData();
-    setTimeout(() => setToast(null), 3000);
+    try {
+      const updated = await updateSettings(settings, currentUser);
+      setSettings(updated);
+      setToast('Pengaturan kebijakan perpustakaan berhasil diperbarui.');
+      refreshAll();
+      setTimeout(() => setToast(null), 3000);
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : 'Gagal memperbarui pengaturan.');
+      setTimeout(() => setToast(null), 3000);
+    }
+  };
+
+  const handleToggleArchiveBook = async (bookId: string) => {
+    try {
+      await archiveBook(bookId, currentUser);
+      refreshAll();
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : 'Gagal mengubah status buku.');
+      setTimeout(() => setToast(null), 3000);
+    }
+  };
+
+  const handleToggleUserStatus = async (uid: string, status: 'active' | 'inactive') => {
+    try {
+      await updateUserStatus(uid, status, currentUser);
+      refreshAll();
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : 'Gagal mengubah status pengguna.');
+      setTimeout(() => setToast(null), 3000);
+    }
   };
 
   // Stats calculation
@@ -311,7 +365,7 @@ export default function AdminDashboard() {
                             Edit
                           </button>
                           <button
-                            onClick={() => { archiveBook(book.id, currentUser); refreshData(); }}
+                            onClick={() => handleToggleArchiveBook(book.id)}
                             className="px-2.5 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 font-semibold"
                           >
                             {book.status === 'active' ? 'Arsip' : 'Aktifkan'}
@@ -410,8 +464,7 @@ export default function AdminDashboard() {
                         <button
                           onClick={() => {
                             const newStatus = u.status === 'active' ? 'inactive' : 'active';
-                            updateUserStatus(u.uid, newStatus, currentUser);
-                            refreshData();
+                            handleToggleUserStatus(u.uid, newStatus);
                           }}
                           className={`px-3 py-1.5 rounded-lg font-semibold ${u.status === 'active' ? 'bg-red-50 text-red-700 hover:bg-red-100' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}`}
                         >
